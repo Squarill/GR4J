@@ -20,16 +20,19 @@ class Optimizer():
     def objective_function_GR4J_Numba(self, params):
         X1, X2, X3, X4 = params
 
-        Q_obs, Q_sim = G.GR4J_Numba(X1, X2, X3, X4, self.NUMBA_DATA[0], self.NUMBA_DATA[1], self.NUMBA_DATA[2], A=self.A)
+        Q_obs, Q_sim, S, R = G.GR4J_Numba(X1, X2, X3, X4, self.NUMBA_DATA[0], self.NUMBA_DATA[1], self.NUMBA_DATA[2], A=self.A)
 
-        nse = G.calculate_nse_numba(Q_obs, Q_sim)
+        nse = G.calculate_nse(Q_obs, Q_sim)
 
         return 1 - nse
 
     def objective_function_GR4J(self, params):
+        """
+        DEPRECATED! DO NOT USE THIS OBJECTIVE FUNCTION.
+        """
         X1, X2, X3, X4 = params
 
-        Q_obs, Q_sim = G.GR4J(X1, X2, X3, X4, self.DATA, A=self.A)
+        Q_obs, Q_sim, S, R = G.GR4J(X1, X2, X3, X4, self.DATA, A=self.A)
 
         nse = G.calculate_nse(Q_obs, Q_sim)
 

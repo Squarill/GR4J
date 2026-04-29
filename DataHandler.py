@@ -1,12 +1,16 @@
 from Paths import Paths
 import json
 import numpy as np
+from pathlib import Path
 
 ## INPUTS-DATA PREPARATION
 ## BASIC NOTATION
 ## DATE = yyyy-mm-dd
 ## ANY VALUE = 0.000
 def stripdata(p:str) -> list[list]:
+    p = Path(p).with_suffix(".txt")
+    if (Paths.DATASET/p).exists() == False:
+        raise FileNotFoundError(f"{p} is not found.")
     DATES = []
     VALUES = []
     with open(Paths.DATASET / p, "r") as f:
@@ -15,23 +19,13 @@ def stripdata(p:str) -> list[list]:
             spl = data.split()
             try:
                 Q = float(spl[-1])
-                date = spl[0]
+                date = spl[0][:10]
                 check = float(date[:4]) #to check if the first 4 digit of date (year) is a number or not
                 DATES.append(date)
                 VALUES.append(Q)
             except:
+                print(f"{p} WARNING:\tSkipped data line at: {data}")
                 continue
-    return [DATES, VALUES]
-
-def stripdataGRDC(p: str) -> list[list]:
-    DATES = []
-    VALUES = []
-    with open(Paths.DATASET / p, "r") as f:
-        DATA = f.readlines()[37::]
-        for i in range(len(DATA)):
-            DATA[i] = DATA[i].replace(" ","").replace("\n", "").replace(":","").replace(";", "")
-            DATES.append(DATA[i][:10:1])
-            VALUES.append(float(DATA[i][14:]))
     return [DATES, VALUES]
 
 def clip_by_dates(dates,values,start_year, end_year):
@@ -43,128 +37,91 @@ def clip_by_dates(dates,values,start_year, end_year):
             new_values.append(values[i])
     return new_dates, new_values
 
-def create_data_npz_only_nc(start_year = float("-inf"), end_year = float("inf"), file_name:str = "DATA_NUMPY.npz"):
-    pre_dates, PVALUES = stripdata("pre_data.txt")
-    pet_dates, PETVALUES = stripdata("pet_data.txt")
-    tavg_dates, TAVGVALUES = stripdata("tavg_data.txt") 
-    q_dates, QVALUES = stripdata("q_data.txt")
+def create_data(start_year = float("-inf"), end_year = float("inf"), file_name:str = "DATA_NUMPY", create_json:bool = False, **DATA_PATH_DICT):
+    """
+    Special data notation (must be used):
+    Precipitation = "P"
+    Potential Evapotranspiration = "PET"
+    Discharge = "Q"
 
+    Example:
+    DATA_PATH_DICT = {
+        "P": "pre_data.txt",
+        "PET": "pet_data.txt",
+        "Q": "q_data.txt"
+    }
+    create_data(**DATA_PATH_DICT)
+    """
+    file_name = Path(file_name).with_suffix(".npz")
 
-    if start_year == float("-inf") or end_year == float("inf"):
-        start_year = max(int(pre_dates[0][:4]), int(pet_dates[0][:4]), int(tavg_dates[0][:4]), int(q_dates[0][:4]))
-        end_year = min(int(pre_dates[-1][:4]), int(pet_dates[-1][:4]), int(tavg_dates[-1][:4]), int(q_dates[-1][:4]))
+    date_start = float("-inf")
+    date_end = float("inf")
 
-    #datecheck
-    data_date_start = max(int(pre_dates[0][:4]), int(pet_dates[0][:4]), int(tavg_dates[0][:4]), int(q_dates[0][:4]))
-    data_date_end = min(int(pre_dates[-1][:4]), int(pet_dates[-1][:4]), int(tavg_dates[-1][:4]), int(q_dates[-1][:4]))
+    DATAS = {}
+    #To determine the start and end dates
+    for data_type, data_name in DATA_PATH_DICT.items():
+        dates, values = stripdata(data_name)
 
-    if data_date_start > start_year or data_date_end < end_year:
-        print("Given data does not qualify the time limits.")
-        print("Wanted time limits:")
-        print(f"Start year:{start_year}, End year:{end_year}")
-        print("Time limits of given data:")
-        print(f"Start year:{data_date_start}, End year:{data_date_end}")
-        return
-
-    pre_dates, PVALUES = clip_by_dates(pre_dates, PVALUES, start_year, end_year)
-    pet_dates, PETVALUES = clip_by_dates(pet_dates, PETVALUES, start_year, end_year)
-    tavg_dates, TAVGVALUES = clip_by_dates(tavg_dates, TAVGVALUES, start_year, end_year)
-    q_dates, QVALUES = clip_by_dates(q_dates, QVALUES, start_year, end_year)
-
-    p_vector = np.array(PVALUES)
-    pet_vector = np.array(PETVALUES)
-    tavg_vector = np.array(TAVGVALUES)
-    q_obs_vector = np.array(QVALUES)
-    dates_vector = np.array(q_dates)
-
-    np.savez(
-        Paths.DATASET / file_name,
-        P = p_vector,
-        PET = pet_vector,
-        T = tavg_vector,
-        Q = q_obs_vector,
-        DATES = dates_vector
-    )
-
-def create_data_json(start_year = float("-inf"), end_year = float("inf"), file_name:str = "DATA.json"):
-    pre_dates, PVALUES = stripdata("pre_data.txt")
-    pet_dates, PETVALUES = stripdata("pet_data.txt")
-    tavg_dates, TAVGVALUES = stripdata("tavg_data.txt") 
-    q_dates, QVALUES = stripdataGRDC("GRDC_Q_Day.txt")
-
-
-    if start_year == float("-inf") or end_year == float("inf"):
-        start_year = max(int(pre_dates[0][:4]), int(pet_dates[0][:4]), int(tavg_dates[0][:4]), int(q_dates[0][:4]))
-        end_year = min(int(pre_dates[-1][:4]), int(pet_dates[-1][:4]), int(tavg_dates[-1][:4]), int(q_dates[-1][:4]))
-
-    #datecheck
-    data_date_start = max(int(pre_dates[0][:4]), int(pet_dates[0][:4]), int(tavg_dates[0][:4]), int(q_dates[0][:4]))
-    data_date_end = min(int(pre_dates[-1][:4]), int(pet_dates[-1][:4]), int(tavg_dates[-1][:4]), int(q_dates[-1][:4]))
-
-    if data_date_start > start_year or data_date_end < end_year:
-        print("Given data does not qualify the time limits.")
-        print("Wanted time limits:")
-        print(f"Start year:{start_year}, End year:{end_year}")
-        print("Time limits of given data:")
-        print(f"Start year:{data_date_start}, End year:{data_date_end}")
-        return
+        data_date_start = int(dates[0][:4])
+        data_date_end = int(dates[-1][:4])
+        
+        if start_year == float("-inf"):
+            date_start = max(data_date_start, date_start)
+        else:
+            if data_date_start > start_year:
+                raise ValueError(f"{data_type} data starting year ({data_date_start}) is greater than the given start year ({start_year}).")
+            date_start = start_year
+        if end_year == float("inf"):
+            date_end = min(data_date_end, date_end)
+        else:
+            if data_date_end < end_year:
+                raise ValueError(f"{data_type} data ending year ({data_date_end}) is less than the given end year ({end_year}).")
+            date_end = end_year
     
-    pre_dates, PVALUES = clip_by_dates(pre_dates, PVALUES, start_year, end_year)
-    pet_dates, PETVALUES = clip_by_dates(pet_dates, PETVALUES, start_year, end_year)
-    tavg_dates, TAVGVALUES = clip_by_dates(tavg_dates, TAVGVALUES, start_year, end_year)
-    q_dates, QVALUES = clip_by_dates(q_dates, QVALUES, start_year, end_year)
+        DATAS[data_type] = [dates, values]
+
+    #To clip the data according to found date limits
+    for data_type, values in DATAS.items():
+        dates, values = values
+        dates, values = clip_by_dates(dates, values, date_start, date_end)
+        DATAS[data_type] = [dates, values]
+
+    #Create the .npz file
+    len_check = None
+    numpified_data = {}
+    for data_type, values in DATAS.items():
+        dates, values = values
+
+        if len_check == None:
+            len_check = len(values)
+        elif len_check != len(values):
+            raise ValueError(f"{data_type} data length is NOT consistent.")
+        
+        numpified_data[data_type] = np.asarray(values)
+        numpified_data["DATES"] = np.asarray(dates)
     
-    DATA = {}
-    for i in range(len(pre_dates)):
-        DATA[q_dates[i]] = [PVALUES[i], PETVALUES[i], TAVGVALUES[i], QVALUES[i]]
+    np.savez(Paths.DATASET / file_name, **numpified_data)
+    if create_json:
+        json_data = {}
+        for data_type, values in DATAS.items():
+            dates, values = values
+            json_data[data_type] = {}
 
-    with open(Paths.DATASET / file_name, "w") as f:
-        json.dump(DATA, f, ensure_ascii=False, indent= 4) #In order to use the same data to train an LSTM model, it is required to store them.
+            for i in range(len(values)):
+                date = dates[i]
+                value = values[i]
+                json_data[data_type][date] = value
+        
+        with open(Paths.DATASET / file_name.with_suffix(".json"), "w") as f:
 
-def create_data_npz(start_year = float("-inf"), end_year = float("inf"), file_name:str = "DATA_NUMPY.npz"):
-    pre_dates, PVALUES = stripdata("pre_data.txt")
-    pet_dates, PETVALUES = stripdata("pet_data.txt")
-    tavg_dates, TAVGVALUES = stripdata("tavg_data.txt") 
-    q_dates, QVALUES = stripdataGRDC("GRDC_Q_Day.txt")
+            json.dump(json_data, f, indent=4)
 
 
-    if start_year == float("-inf") or end_year == float("inf"):
-        start_year = max(int(pre_dates[0][:4]), int(pet_dates[0][:4]), int(tavg_dates[0][:4]), int(q_dates[0][:4]))
-        end_year = min(int(pre_dates[-1][:4]), int(pet_dates[-1][:4]), int(tavg_dates[-1][:4]), int(q_dates[-1][:4]))
 
-    #datecheck
-    data_date_start = max(int(pre_dates[0][:4]), int(pet_dates[0][:4]), int(tavg_dates[0][:4]), int(q_dates[0][:4]))
-    data_date_end = min(int(pre_dates[-1][:4]), int(pet_dates[-1][:4]), int(tavg_dates[-1][:4]), int(q_dates[-1][:4]))
-
-    if data_date_start > start_year or data_date_end < end_year:
-        print("Given data does not qualify the time limits.")
-        print("Wanted time limits:")
-        print(f"Start year:{start_year}, End year:{end_year}")
-        print("Time limits of given data:")
-        print(f"Start year:{data_date_start}, End year:{data_date_end}")
-        return
-    
-    pre_dates, PVALUES = clip_by_dates(pre_dates, PVALUES, start_year, end_year)
-    pet_dates, PETVALUES = clip_by_dates(pet_dates, PETVALUES, start_year, end_year)
-    tavg_dates, TAVGVALUES = clip_by_dates(tavg_dates, TAVGVALUES, start_year, end_year)
-    q_dates, QVALUES = clip_by_dates(q_dates, QVALUES, start_year, end_year)
-    
-    p_vector = np.array(PVALUES)
-    pet_vector = np.array(PETVALUES)
-    tavg_vector = np.array(TAVGVALUES)
-    q_obs_vector = np.array(QVALUES)
-    dates_vector = np.array(q_dates)
-
-    np.savez(
-        Paths.DATASET / file_name,
-        P = p_vector,
-        PET = pet_vector,
-        T = tavg_vector,
-        Q = q_obs_vector,
-        DATES = dates_vector
-    )
-    
 def special_case(start_year = float("-inf"), end_year = float("inf"), file_name:str = "SPECIAL_DATA.npz"):
+    """
+    DO NOT USE THIS FUNCTION, IT IS FOR DEBUGGING ONLY.
+    """
     P_values = []
     PET_values = []
     TAVG_values = []
@@ -200,10 +157,7 @@ def special_case(start_year = float("-inf"), end_year = float("inf"), file_name:
 
 if __name__ == "__main__":
     """
-    create_data_npz_only_nc(start_year=1970, end_year=2000, file_name="1970-2000-calibration.npz")
-    create_data_npz_only_nc(start_year=2000, end_year=2017, file_name="2001-2017-validation.npz")
-    
-    create_data_json(start_year=1970, end_year=2000, file_name="1970-2000-calibration.json")
-    create_data_json(start_year=2000, end_year=2017, file_name="2001-2017-validation.json")
+    create_data(**{"Q" : "q_data", "PET" : "pet_data", "P" : "pre_data"}, create_json=True, start_year=1970, end_year=2000, file_name="1970-2000-calibration")
     """
+    
     pass

@@ -4,6 +4,9 @@ import numpy as np
 from numba import njit
 
 def GR4J(X1, X2, X3, X4, DATA, A) -> tuple: # Will return (Q_obs:list, Q_sim:list)
+    """
+    DEPRECATED! DO NOT USE THIS FUNCTION.
+    """
     S = 0.6 * X1    #Soil Moisture (mm)
     R = 0.7 * X3    #Route Moisture (mm)
 
@@ -102,7 +105,7 @@ def GR4J(X1, X2, X3, X4, DATA, A) -> tuple: # Will return (Q_obs:list, Q_sim:lis
     return (Q_obs, Q_sim)
 
 @njit(cache=True)
-def GR4J_Numba(X1, X2, X3, X4, P, PET, Q_raw, A):
+def GR4J_Numba(X1, X2, X3, X4, P, PET, Q_raw, A, S_init = None, R_init=None):
     """
     Parameters
     ----------
@@ -112,18 +115,24 @@ def GR4J_Numba(X1, X2, X3, X4, P, PET, Q_raw, A):
     X4    : float    – Unit hydrograph time base (day)
     P     : ndarray  – Precipitation array(mm/day)
     PET   : ndarray  – Potential evapotranspiration array (mm/day)
-    Q_raw : ndarray  – Gözlem akımı (m³/s)
+    Q_raw : ndarray  – Observed discharge (m³/s)
     A     : float    – Catchment area (km²)
 
     Returns
     -------
-    (Q_obs, Q_sim) : tuple[ndarray, ndarray]  – mm/day
+    (Q_obs, Q_sim, S, R) : tuple[ndarray, ndarray, float, float]
     """
     n = len(P)
     Q_obs = Q_raw * (86.4 / A)  # m³/s → mm/day
 
-    S = 0.6 * X1
-    R = 0.7 * X3
+    if S_init == None:
+        S = 0.6 * X1
+    else:
+        S = S_init
+    if R_init == None:
+        R = 0.7 * X3
+    else:
+        R = R_init
 
     nUH1 = mt.ceil(X4)
     nUH2 = mt.ceil(2 * X4)
@@ -212,30 +221,16 @@ def GR4J_Numba(X1, X2, X3, X4, P, PET, Q_raw, A):
 
         Q_sim[i] = Qr + Qd
 
-    return Q_obs, Q_sim
+    return Q_obs, Q_sim, S, R
 
-def GR4J_numba_load_and_run(X1, X2, X3, X4, npz_data_path, A):
-    data  = np.load(npz_data_path)
-    P     = data["P"].astype(np.float64)
-    PET   = data["PET"].astype(np.float64)
-    Q_raw = data["Q"].astype(np.float64)
-    return GR4J_Numba(X1, X2, X3, X4, P, PET, Q_raw, A)
+def calculate_nse(q_obs, q_sim, warmup_days:int = 1460):
+    obs = np.asarray(q_obs[warmup_days:])
+    sim = np.asarray(q_sim[warmup_days:])
+    
+    mask = obs >= 0
+    obs = obs[mask]
+    sim = sim[mask]
 
-def calculate_nse(q_obs:list, q_sim:list):
-    obs = np.array(q_obs[1460:])
-    sim = np.array(q_sim[1460:])
-    
-    mean_obs = np.mean(obs)
-    numerator = np.sum((obs - sim) ** 2)
-    denominator = np.sum((obs - mean_obs) ** 2)
-    
-    nse = 1 - (numerator / denominator)
-    return nse
-
-def calculate_nse_numba(q_obs:np, q_sim:np):
-    obs = q_obs[1460:]
-    sim = q_sim[1460:]
-    
     mean_obs = np.mean(obs)
     numerator = np.sum((obs - sim) ** 2)
     denominator = np.sum((obs - mean_obs) ** 2)
