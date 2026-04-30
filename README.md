@@ -9,14 +9,16 @@ Run the `setup.bat` file. This creates a virtual environment (`.venv`) to avoid 
 *Requires Python 3.8 or higher.*
 
 ### 2. Prepare the Data
-Navigate to `Dataset\NetCDF` and run `prepare.bat`. This script converts NetCDF files into processed text data.
 > [!IMPORTANT]  
 > **CDO (Climate Data Operators)** must be installed and added to your system PATH for this step.
-
-Required files in the `Dataset` folder:
+Gather your data in the NetCDF (.nc) format and name them as follows:
 - `pre.nc` (Precipitation)
 - `pet.nc` (Evapotranspiration)
 - `q.nc` (Discharge)
+
+Also put these files in the NetCDF folder if you wish to automatically create the data.txt files.
+Navigate to `Dataset\NetCDF` and run `prepare.bat`. This script converts NetCDF files into processed text data.
+Do not forget that this method is just to create a standardized dataset. If you have another type of dataset, you might need a different method and it might require some new functions to strip data accordingly.
 
 ### 3. Execution
 Use `run.bat` to execute the `main.py` script.
