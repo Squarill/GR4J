@@ -4,7 +4,7 @@ import time
 from Paths import Paths
 
 class Optimizer():
-    def __init__(self, A:float, bounds:list, NUMBA_DATA:list = None, DATA = None, maxiter: int = 100, popsize: int = 15, tol :float = 0, atol : float = 0, cpu_count : int = 1):
+    def __init__(self, A:float, bounds:list, NUMBA_DATA:list = None, DATA = None, warmup_days:int = 1460,maxiter: int = 100, popsize: int = 15, tol :float = 0, atol : float = 0, cpu_count : int = 1):
 
         self.A = A
         self.bounds = bounds
@@ -16,13 +16,15 @@ class Optimizer():
         self.tol = tol
         self.atol = atol
         self.cpu_count = cpu_count
+
+        self.warmup_days = warmup_days
         
     def objective_function_GR4J_Numba(self, params):
         X1, X2, X3, X4 = params
 
         Q_obs, Q_sim, S, R = G.GR4J_Numba(X1, X2, X3, X4, self.NUMBA_DATA[0], self.NUMBA_DATA[1], self.NUMBA_DATA[2], A=self.A)
 
-        nse = G.calculate_nse(Q_obs, Q_sim)
+        nse = G.calculate_nse(Q_obs, Q_sim, warmup_days=self.warmup_days)
 
         return 1 - nse
 
@@ -34,7 +36,7 @@ class Optimizer():
 
         Q_obs, Q_sim, S, R = G.GR4J(X1, X2, X3, X4, self.DATA, A=self.A)
 
-        nse = G.calculate_nse(Q_obs, Q_sim)
+        nse = G.calculate_nse(Q_obs, Q_sim, warmup_days=self.warmup_days)
 
         return 1 - nse
 

@@ -33,7 +33,7 @@ if __name__ == "__main__":
 
     #Activating DE optimizer
     #cpu_count = -1 means it will use every core available in the system
-    Op = Optimizer(A, bounds=bounds, NUMBA_DATA=NUMBA_DATA, maxiter=500, popsize=40, cpu_count=-1)
+    Op = Optimizer(A, bounds=bounds, NUMBA_DATA=NUMBA_DATA, warmup_days=1460, maxiter=500, popsize=40, cpu_count=-1)
     best_params = Op.optimize(f = Op.objective_function_GR4J_Numba)
 
     #In order to have the final S and R values, we will run the function one more time with the same data
