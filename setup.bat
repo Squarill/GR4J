@@ -22,7 +22,8 @@ if exist .venv\ (
     echo Virtual environment created successfully.
 )
 
-echo Installing requirements...
+echo Installing requirements and updating pip...
+.venv\Scripts\python -m pip install --upgrade pip
 .venv\Scripts\pip install -r requirements.txt
 if %errorlevel% == 0 (
     echo Requirements installed successfully.
