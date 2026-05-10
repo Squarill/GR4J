@@ -223,6 +223,163 @@ def GR4J_Numba(X1, X2, X3, X4, P, PET, Q_raw, A, S_init = None, R_init=None):
 
     return Q_obs, Q_sim, S, R
 
+@njit(cache=True)
+def GR4J_CemaNeige_Numba(X1, X2, X3, X4, CTG, Kf,
+                          P, PET, T, Q_raw, A,
+                          S_init=None, R_init=None,
+                          G_init=None, Etat_init=None):
+    """
+    Parameters
+    ----------
+    X1    : float   – Soil moisture capacity (mm)
+    X2    : float   – Groundwater exchange coefficient (mm/day)
+    X3    : float   – Routing store capacity (mm)
+    X4    : float   – Unit hydrograph time base (day)
+    CTG   : float   – Thermal inertia coefficient (0-1)
+    Kf    : float   – Melt factor (mm/°C/day)
+    P     : ndarray – Precipitation (mm/day)
+    PET   : ndarray – Potential evapotranspiration (mm/day)
+    T     : ndarray – Mean air temperature (°C)
+    Q_raw : ndarray – Observed discharge (m³/s)
+    A     : float   – Catchment area (km²)
+    S_init, R_init  – Initial soil/routing store states (mm)
+    G_init, Etat_init – Initial snow pack / thermal state
+
+    Returns
+    -------
+    (Q_obs, Q_sim, S, R, G, Etat)
+    """
+    n     = len(P)
+    Q_obs = Q_raw * (86.4 / A)
+
+    # ── Başlangıç koşulları ───────────────────────────────────
+    S    = 0.6 * X1  if S_init    is None else S_init
+    R    = 0.7 * X3  if R_init    is None else R_init
+    G    = 0.0       if G_init    is None else G_init
+    Etat = 0.0       if Etat_init is None else Etat_init
+
+    # ── Birim hidrogramlar ────────────────────────────────────
+    nUH1 = mt.ceil(X4)
+    nUH2 = mt.ceil(2 * X4)
+
+    SH1 = np.zeros(nUH1 + 1)
+    for t in range(nUH1 + 1):
+        if 0 < t < X4:
+            SH1[t] = (t / X4) ** 2.5
+        elif t >= X4:
+            SH1[t] = 1.0
+
+    SH2 = np.zeros(nUH2 + 1)
+    for t in range(nUH2 + 1):
+        if 0 < t < X4:
+            SH2[t] = 0.5 * (t / X4) ** 2.5
+        elif X4 <= t < 2 * X4:
+            SH2[t] = 1 - 0.5 * (2 - t / X4) ** 2.5
+        elif t >= 2 * X4:
+            SH2[t] = 1.0
+
+    UH1 = np.empty(nUH1)
+    for j in range(nUH1):
+        UH1[j] = SH1[j+1] - SH1[j]
+
+    UH2 = np.empty(nUH2)
+    for j in range(nUH2):
+        UH2[j] = SH2[j+1] - SH2[j]
+
+    Pr9_buf = np.zeros(nUH1)
+    Pr1_buf = np.zeros(nUH2)
+    Q_sim   = np.empty(n)
+
+    # ── Ana döngü ─────────────────────────────────────────────
+    for i in range(n):
+        temp = T[i]
+        p    = P[i]
+
+        # ── CemaNeige: Kar birikim / erime ───────────────────
+        # Yağışı kar / yağmur olarak ayır (eşik = 0°C)
+        if temp <= 0.0:
+            Snow = p
+            Rain = 0.0
+        else:
+            Snow = 0.0
+            Rain = p
+
+        # Kar kütlesini güncelle
+        G += Snow
+
+        # Termal durumu güncelle
+        Etat = CTG * Etat + (1 - CTG) * temp
+
+        # Erime hesabı
+        if Etat > 0.0 and G > 0.0:
+            Melt = min(Kf * Etat, G)
+        else:
+            Melt = 0.0
+
+        G -= Melt
+
+        # GR4J'ye giren efektif yağış = yağmur + eriyen kar
+        P_eff = Rain + Melt
+
+        # ── GR4J ─────────────────────────────────────────────
+        pet = PET[i]
+
+        Pn = P_eff - pet
+        En = -Pn
+        if Pn < 0:
+            Pn = 0.0
+        if En < 0:
+            En = 0.0
+
+        Ps = 0.0
+        Es = 0.0
+
+        if Pn > 0:
+            tnh = mt.tanh(Pn / X1)
+            Ps  = (X1 * (1 - (S/X1)**2) * tnh) / (1 + (S/X1) * tnh)
+
+        if En > 0:
+            tnh = mt.tanh(En / X1)
+            Es  = (S * (2 - S/X1) * tnh) / (1 + (1 - S/X1) * tnh)
+
+        S   += Ps - Es
+        Perc = S * (1 - (1 + (4*S / (9*X1))**4) ** (-0.25))
+        S   -= Perc
+
+        Pr = Pn - Ps + Perc
+
+        for k in range(nUH1 - 1, 0, -1):
+            Pr9_buf[k] = Pr9_buf[k-1]
+        Pr9_buf[0] = Pr * 0.9
+
+        for k in range(nUH2 - 1, 0, -1):
+            Pr1_buf[k] = Pr1_buf[k-1]
+        Pr1_buf[0] = Pr * 0.1
+
+        Q9 = 0.0
+        for k in range(nUH1):
+            Q9 += Pr9_buf[k] * UH1[k]
+
+        Q1 = 0.0
+        for k in range(nUH2):
+            Q1 += Pr1_buf[k] * UH2[k]
+
+        F  = X2 * (R / X3) ** 3.5
+        R += Q9 + F
+        if R < 0:
+            R = 0.0
+
+        Qr = R * (1 - (1 + (R / X3)**4) ** (-0.25))
+        R  -= Qr
+
+        Qd = Q1 + F
+        if Qd < 0:
+            Qd = 0.0
+
+        Q_sim[i] = Qr + Qd
+
+    return Q_obs, Q_sim, S, R, G, Etat
+
 def calculate_nse(q_obs, q_sim, warmup_days:int = 1460):
     obs = np.asarray(q_obs[warmup_days:])
     sim = np.asarray(q_sim[warmup_days:])

@@ -18,7 +18,16 @@ class Optimizer():
         self.cpu_count = cpu_count
 
         self.warmup_days = warmup_days
-        
+    
+    def objective_function_GR4J_CemaNeige_Numba(self, params):
+        X1, X2, X3, X4, CTG, Kf = params
+
+        Q_obs, Q_sim, S, R, g, Etat = G.GR4J_CemaNeige_Numba(X1, X2, X3, X4, CTG, Kf, self.NUMBA_DATA[0], self.NUMBA_DATA[1], self.NUMBA_DATA[2], self.NUMBA_DATA[3], A=self.A)
+
+        nse = G.calculate_nse(Q_obs, Q_sim, warmup_days=self.warmup_days)
+
+        return 1 - nse
+    
     def objective_function_GR4J_Numba(self, params):
         X1, X2, X3, X4 = params
 

@@ -2,7 +2,8 @@ from Paths import Paths
 import json
 import numpy as np
 from pathlib import Path
-
+import pandas
+import datetime as dt
 ## INPUTS-DATA PREPARATION
 ## BASIC NOTATION
 ## DATE = yyyy-mm-dd
@@ -28,6 +29,18 @@ def stripdata(p:str) -> list[list]:
                 continue
     return [DATES, VALUES]
 
+def stripdatacsv(p:str) -> list[list]:
+    p = Path(p).with_suffix(".csv")
+    with open(Paths.DATASET / p, "r") as f:
+        df = pandas.read_csv(f)
+    
+    DATES = np.asarray(df["date"])
+    P = np.asarray(df["total_precipitation_sum"]) * 1000
+    PET = np.asarray(df["potential_evaporation_sum"]) * -1000
+    T = np.asarray(df["temperature_2m"]) - 273.15
+
+    return [DATES, P, PET, T]
+
 def clip_by_dates(dates,values,start_year, end_year):
     new_dates = []
     new_values = []
@@ -36,6 +49,16 @@ def clip_by_dates(dates,values,start_year, end_year):
             new_dates.append(dates[i])
             new_values.append(values[i])
     return new_dates, new_values
+
+def date_consistency_check(dates):
+    for i in range(1,len(dates)):
+        d1 = dt.datetime.strptime(dates[i-1], "%Y-%m-%d")
+        d2 = dt.datetime.strptime(dates[i], "%Y-%m-%d")
+        if (d2 - d1).days != 1:
+            print(d2, d1)
+            return False
+    return True
+
 
 def create_data(start_year = float("-inf"), end_year = float("inf"), file_name:str = "DATA_NUMPY", create_json:bool = False, **DATA_PATH_DICT):
     """
@@ -116,7 +139,29 @@ def create_data(start_year = float("-inf"), end_year = float("inf"), file_name:s
 
             json.dump(json_data, f, indent=4)
 
+def create_data_from_csv(start_year = float("-inf"), end_year = float("inf"), file_name:str = "DATA_NUMPY", create_json:bool = False, q_data:str = "q_data_bratislava.txt", CSV_DATA:str = "era5_bratislava_withgeojson_1970_2000.csv"):
+    file_name = Path(file_name).with_suffix(".npz")
 
+    csv_dates, P, PET, T = stripdatacsv(CSV_DATA)
+    q_dates, Q = stripdata(q_data)
+
+    if start_year == float("-inf"):
+        date_start = max(int(csv_dates[0][:4]), int(q_dates[0][:4]))
+    else:
+        date_start = start_year
+    if end_year == float("inf"):
+        date_end = min(int(csv_dates[-1][:4]), int(q_dates[-1][:4]))
+    else:
+        date_end = end_year
+
+    dates, P = clip_by_dates(csv_dates, P, date_start, date_end)
+    dates, PET = clip_by_dates(csv_dates, PET, date_start, date_end)
+    dates, T = clip_by_dates(csv_dates, T, date_start, date_end)
+    q_dates, Q =clip_by_dates(q_dates, Q, date_start, date_end)
+
+
+    np.savez(Paths.DATASET / file_name, P = P, PET = PET, T = T, Q = Q, DATES = dates)
+    pass
 
 def special_case(start_year = float("-inf"), end_year = float("inf"), file_name:str = "SPECIAL_DATA.npz"):
     """
@@ -160,4 +205,10 @@ if __name__ == "__main__":
     create_data(**{"Q" : "q_data", "PET" : "pet_data", "P" : "pre_data"}, create_json=True, start_year=1970, end_year=2000, file_name="1970-2000-calibration")
     """
     
+    create_data_from_csv(file_name="bratislava_1970_2000", CSV_DATA="era5_bratislava_withgeojson_1970_2000.csv", q_data="q_data_bratislava.txt")
+    create_data_from_csv(file_name="bratislava_2001_2020", CSV_DATA="era5_bratislava_withgeojson_2001_2020.csv", q_data="q_data_bratislava.txt")
+
+    dataval = np.load(Paths.DATASET / "bratislava_2001_2020.npz")
+    datacal = np.load(Paths.DATASET / "bratislava_1970_2000.npz")
+    print(datacal["DATES"][-1], dataval["DATES"][0])
     pass

@@ -2,7 +2,7 @@ import numpy as np
 import json
 import matplotlib.pyplot as plt
 
-import GR4J_Model as G
+import GR4J_Model as GR4J
 from DE_Optim import Optimizer
 import DataHandler as DH
 from Paths import Paths
@@ -70,3 +70,49 @@ if __name__ == "__main__":
     plt.tight_layout()
     plt.show()
     """
+
+    A = 131520.65 #km²
+
+    bounds = [
+    (100, 2000),   # X1
+    (-10, 5),      # X2
+    (1, 500),     # X3
+    (1.1, 15.0),   # X4
+    (-5.0, 5.0),    # CTG
+    (0.0, 10.0),    # Kf
+]
+
+    #Pulling the created data
+    npz_data = np.load(Paths.DATASET / "bratislava_1970_2000.npz")
+    P = npz_data["P"].astype(np.float64)
+    PET = npz_data["PET"].astype(np.float64)
+    T = npz_data["T"].astype(np.float64)
+    Q = npz_data["Q"].astype(np.float64)
+    print(f"P_len = {len(P)}")
+    print(f"PET_len = {len(PET)}")
+    print(f"T_len = {len(T)}")
+    print(f"Q_len = {len(Q)}")
+    NUMBA_DATA = [P, PET, T, Q] #This order is necessary for used GR4J function
+
+    #Activating DE optimizer
+    #cpu_count = -1 means it will use every core available in the system
+    Op = Optimizer(A, bounds=bounds, NUMBA_DATA=NUMBA_DATA, warmup_days=1460, maxiter=1000000, popsize=60, cpu_count=-1)
+    best_params = Op.optimize(f = Op.objective_function_GR4J_CemaNeige_Numba)
+
+    Q_obs, Q_sim, S, R, G, Etat = GR4J.GR4J_CemaNeige_Numba(best_params[0], best_params[1], best_params[2], best_params[3], best_params[4], best_params[5], P, PET, T, Q, A)
+
+    #Preparing the validation process
+    npz_data = np.load(Paths.DATASET / "bratislava_2001_2020.npz")
+    P = npz_data["P"].astype(np.float64)
+    PET = npz_data["PET"].astype(np.float64)
+    T = npz_data["T"].astype(np.float64)
+    Q = npz_data["Q"].astype(np.float64)
+    
+    #NSE calculation on validation data
+    Q_obs, Q_sim, S, R, G, Etat = GR4J.GR4J_CemaNeige_Numba(best_params[0], best_params[1], best_params[2], best_params[3], best_params[4], best_params[5], P, PET, T, Q, A, S, R, G, Etat)
+
+    nse = GR4J.calculate_nse(Q_obs, Q_sim, warmup_days=0)
+    print(f"NSE on Validation Set: {nse:.4f}")
+
+
+    #"""
