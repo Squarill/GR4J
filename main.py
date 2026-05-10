@@ -37,7 +37,7 @@ if __name__ == "__main__":
     best_params = Op.optimize(f = Op.objective_function_GR4J_Numba)
 
     #In order to have the final S and R values, we will run the function one more time with the same data
-    Q_obs, Q_sim, S, R = G.GR4J_Numba(best_params[0], best_params[1], best_params[2], best_params[3],P, PET, Q, A)
+    Q_obs, Q_sim, S, R = GR4J.GR4J_Numba(best_params[0], best_params[1], best_params[2], best_params[3],P, PET, Q, A)
 
     #Preparing the validation process
     npz_data = np.load(Paths.DATASET / "2001-2017-validation.npz")
@@ -46,8 +46,8 @@ if __name__ == "__main__":
     Q = npz_data["Q"].astype(np.float64)
     
     #NSE calculation on validation data
-    Q_obs, Q_sim, S, R = G.GR4J_Numba(best_params[0], best_params[1], best_params[2], best_params[3],P, PET, Q, A, S, R)
-    nse = G.calculate_nse(Q_obs, Q_sim, warmup_days=0)
+    Q_obs, Q_sim, S, R = GR4J.GR4J_Numba(best_params[0], best_params[1], best_params[2], best_params[3],P, PET, Q, A, S, R)
+    nse = GR4J.calculate_nse(Q_obs, Q_sim, warmup_days=0)
     print(f"NSE on Validation Set: {nse:.4f}")
 
     #Plotting the last 730 days' observed and simulated hydrographs
