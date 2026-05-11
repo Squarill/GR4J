@@ -9,6 +9,9 @@ Run the `setup.bat` file. This creates a virtual environment (`.venv`) to avoid 
 *Requires Python 3.8 or higher.*
 
 ### 2. Prepare the Data
+
+There are premade data.txt files for Briance River part of Vienne catchment. If you wish to work on another basin you can follow the steps below or you can create your own data.txt files with some other ways.
+
 > [!IMPORTANT]  
 > **CDO (Climate Data Operators)** must be installed and added to your system PATH for this step.
 Gather your data in the NetCDF (.nc) format and name them as follows:

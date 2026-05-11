@@ -7,9 +7,7 @@ from DE_Optim import Optimizer
 import DataHandler as DH
 from Paths import Paths
 
-
-if __name__ == "__main__":
-    """
+def premade_function():
     #Creating the data
     DATA_PATH_DICT = {
         "P": "pre_data.txt",
@@ -69,4 +67,6 @@ if __name__ == "__main__":
 
     plt.tight_layout()
     plt.show()
-    """
+
+if __name__ == "__main__":
+   premade_function()
