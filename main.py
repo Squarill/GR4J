@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import GR4J_Model as G
 from DE_Optim import Optimizer
 import DataHandler as DH
-from Paths import Paths
+from config import Paths
 
 def premade_function():
     #Creating the data

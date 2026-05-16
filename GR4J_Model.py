@@ -1,5 +1,5 @@
 import math as mt
-from Paths import Paths as Paths
+from config import Paths as Paths
 import numpy as np
 from numba import njit
 

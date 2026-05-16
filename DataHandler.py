@@ -1,4 +1,4 @@
-from Paths import Paths
+from config import Paths
 import json
 import numpy as np
 from pathlib import Path

@@ -1,7 +1,7 @@
 from scipy.optimize import differential_evolution
 import GR4J_Model as G
 import time
-from Paths import Paths
+from config import Paths
 
 class Optimizer():
     def __init__(self, A:float, bounds:list, NUMBA_DATA:list = None, DATA = None, warmup_days:int = 1460,maxiter: int = 100, popsize: int = 15, tol :float = 0, atol : float = 0, cpu_count : int = 1):
