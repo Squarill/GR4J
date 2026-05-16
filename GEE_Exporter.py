@@ -2,7 +2,7 @@ import ee
 import json
 from config import Paths
 import numpy as np
-
+import os
 
 class GEE_Exporter():
     def __init__(self, project_name:str, geojson_path:str, start_date:str, end_date:str, variables:list, output_path:str = Paths.DATASET / "GEE_EXPORT_DATA.npz"):
@@ -19,10 +19,17 @@ class GEE_Exporter():
         ee.Authenticate()
         print("Connected.")
     
-    def deAuthenticate():
+    def deAuthenticate(self):
         print("Disconnecting your Google account from the system.")
+        credentials_path = os.path.expanduser("~/.config/earthengine/credentials")
+        if os.path.exists(credentials_path) != True:
+            print("No credentials found to be deleted, already non-authenticated.")
+            return
+        os.remove(credentials_path)
+        print("Disconnected.")
 
     def export(self):
+        print("Exporting data from Google Earth Engine.")
         def extract_stats(image):
             stats = image.reduceRegion(
                 reducer=ee.Reducer.mean(),
@@ -36,80 +43,42 @@ class GEE_Exporter():
         with open(self.geojson_path, "r") as f:
             geojson = ee.FeatureCollection(json.load(f))
         area = geojson.geometry()
-
-        dataset = ee.ImageCollection("ECMWF/ERA5_LAND/DAILY_AGGR") \
-            .filterDate(self.start_date, self.end_date) \
-            .select(self.variables)
-
-        fc = dataset.map(extract_stats)
         
         #Preparing the data dict
         DATA_DICT = {}
         for variable in self.variables:
             DATA_DICT[variable] = []
         DATA_DICT["DATES"] = []
+        DATA_DICT["variables"] = self.variables
         
+        start = int(self.start_date[:4])
+        end = int(self.end_date[:4])
+        print(start, end)
+        for year in range(start, end + 1):
+            print(f"Collecting: {year}-01-01 to {year + 1}-01-01")
+            dataset = ee.ImageCollection("ECMWF/ERA5_LAND/DAILY_AGGR") \
+                .filterDate(f"{year}-01-01", f"{year + 1}-01-01") \
+                .filterBounds(area) \
+                .select(self.variables)
 
-        for data_cluster in fc.getInfo()["features"]:
-            properties = data_cluster["properties"]
-            date = properties["date"]
-            DATA_DICT["DATES"].append(date)
-            for variable in self.variables:
-                DATA_DICT[variable].append(properties[variable])
+            fc = dataset.map(extract_stats)
+
+            for data_cluster in fc.getInfo()["features"]:
+                properties = data_cluster["properties"]
+                date = properties["date"]
+                DATA_DICT["DATES"].append(date)
+                for variable in self.variables:
+                    DATA_DICT[variable].append(properties[variable])
 
         np.savez(file=self.output_path, **DATA_DICT)
 
-
-"""
-ee.Authenticate()
-ee.Initialize(project="bratislava-danube-river")
-
-with open("Bratislava.geojson", "r") as f:
-    geojson = ee.FeatureCollection(json.load(f))
-area = geojson.geometry()
-
-
-dataset = ee.ImageCollection("ECMWF/ERA5_LAND/DAILY_AGGR") \
-    .filterDate('2000-01-01', '2021-01-01') \
-    .select([
-        'total_precipitation_sum',
-        'temperature_2m',
-        'potential_evaporation_sum'
-    ])
-
-def extract_stats(image):
-    stats = image.reduceRegion(
-        reducer=ee.Reducer.mean(),
-        geometry=area,
-        scale=9000,
-        maxPixels=1e9
-    )
-    return ee.Feature(None, stats.set('date', image.date().format('YYYY-MM-dd')))
-
-fc = dataset.map(extract_stats)
-
-# Drive'a gönder
-task = ee.batch.Export.table.toDrive(
-    collection=fc,
-    description='era5_bratislava_2001_2020',
-    folder='GEE_Exports',          # Drive'da otomatik oluşturur
-    fileNamePrefix='era5_bratislava_withgeojson_2001_2020',
-    fileFormat='CSV'
-)
-task.start()
-print("Task baslatildi:", task.id)
-
-# Kod içinde kontrol
-import time
-
-while task.active():
-    print("Durum:", task.status()['state'])
-    time.sleep(10)
-
-print("Tamamlandi:", task.status()['state'])
-"""
+        print(f"Data saved to {self.output_path}.")
+        print(f"Data start date: {DATA_DICT['DATES'][0]}")
+        print(f"Data end date: {DATA_DICT['DATES'][-1]}")
+        print("Exporting completed.")
 
 if __name__ == "__main__":
+    """
     exporter = GEE_Exporter("bratislava-danube-river", Paths.DATASET/"Bratislava.geojson", "2001-01-01", "2002-12-31", ["total_precipitation_sum", "temperature_2m", "potential_evaporation_sum"])
     exporter.Authenticate()
     exporter.export()
@@ -120,5 +89,4 @@ if __name__ == "__main__":
     print(npzfile["total_precipitation_sum"][0], npzfile["total_precipitation_sum"][-1])
     print(npzfile["temperature_2m"][0], npzfile["temperature_2m"][-1])
     print(npzfile["potential_evaporation_sum"][0], npzfile["potential_evaporation_sum"][-1])
-
-    pass
+    """

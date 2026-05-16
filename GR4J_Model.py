@@ -1,5 +1,5 @@
 import math as mt
-from Paths import Paths as Paths
+from config import Paths as Paths
 import numpy as np
 from numba import njit
 
@@ -237,6 +237,21 @@ def calculate_nse(q_obs, q_sim, warmup_days:int = 1460):
     
     nse = 1 - (numerator / denominator)
     return nse
+
+def calculate_kge(q_obs, q_sim, warmup_days:int = 1460):
+    obs = np.asarray(q_obs[warmup_days:])
+    sim = np.asarray(q_sim[warmup_days:])
+    
+    mask = obs >= 0
+    obs = obs[mask]
+    sim = sim[mask]
+
+    alpha = np.std(obs) / np.std(sim)
+    beta = np.mean(obs) / np.mean(sim)
+    rho = np.corrcoef(obs, sim)[0, 1]
+    
+    kge = 1 - np.sqrt((alpha - 1) ** 2 + (beta - 1) ** 2 + (rho - 1) ** 2)
+    return kge
 
 if __name__ == "__main__":
 
