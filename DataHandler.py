@@ -2,7 +2,7 @@ from config import Paths
 import json
 import numpy as np
 from pathlib import Path
-import os
+import matplotlib.pyplot as plt
 
 ## INPUTS-DATA PREPARATION
 ## BASIC NOTATION
@@ -29,18 +29,18 @@ def stripdata(p:str) -> list[list]:
                 continue
     return [DATES, VALUES]
 
-def clip_by_dates(data_type, dates,values,start_year, end_year):
+def clip_by_dates(data_type, dates,values,start_date, end_date):
     new_dates = []
     new_values = []
     for i in range(len(dates)):
-        if int(dates[i][:4]) >= start_year and int(dates[i][:4]) <= end_year:
+        if np.datetime64(dates[i]) >= np.datetime64(start_date) and np.datetime64(dates[i]) <= np.datetime64(end_date):
             new_dates.append(dates[i])
             new_values.append(values[i])
     print(f"Clipped Dates for {data_type}: {new_dates[0]} - {new_dates[-1]}")
     print(f"Clipped Value Lengths for {data_type}: {len(new_values)}")
     return new_dates, new_values
 
-def create_data(start_year = float("-inf"), end_year = float("inf"), file_name:str = "DATA_NUMPY", create_json:bool = False, **DATA_PATH_DICT):
+def _create_data(start_year = float("-inf"), end_year = float("inf"), file_name:str = "DATA_NUMPY", create_json:bool = False, **DATA_PATH_DICT):
     """
     Special data notation (must be used):
     Precipitation = "P"
@@ -109,7 +109,8 @@ def create_data(start_year = float("-inf"), end_year = float("inf"), file_name:s
         numpified_data[data_type] = np.asarray(values)
         numpified_data["DATES"] = np.asarray(dates)
     
-    np.savez(Paths.DATASET / file_name, **numpified_data)
+    file = np.savez(Paths.DATASET / file_name, **numpified_data)
+    print(file)
     if create_json:
         json_data = {}
         for data_type, values in DATAS.items():
@@ -122,8 +123,173 @@ def create_data(start_year = float("-inf"), end_year = float("inf"), file_name:s
                 json_data[data_type][date] = value
         
         with open(Paths.DATASET / file_name.with_suffix(".json"), "w") as f:
-
+            
             json.dump(json_data, f, indent=4)
+            return file, f
+    
+    return file
+
+def stripdata_2(p:str) -> list[list]:
+    DATES = []
+    VALUES = []
+    with open(p, "r") as f:
+        DATA = f.readlines()
+        for data in DATA:
+            spl = data.split()
+            try:
+                Q = float(spl[-1])
+                date = spl[0][:10]
+                check = float(date[:4]) #to check if the first 4 digit of date (year) is a number or not
+                DATES.append(date)
+                VALUES.append(Q)
+            except:
+                print(f"{p} WARNING:\tSkipped data line at: {data}")
+                continue
+    return [DATES, VALUES]
+
+def create_data_by_files(start_date = None, end_date = None, file_name:str = "DATA_NUMPY", area:float = None,**DATA_PATH_DICT):
+    file_name = Path(file_name).with_suffix(".npz")
+    start_date = np.datetime64(start_date)
+    end_date = np.datetime64(end_date)
+
+    date_start = float("-inf")
+    date_end = float("inf")
+
+    DATAS = {}
+
+    for data_type, data_path in DATA_PATH_DICT.items():
+        if data_path.endswith((".npz")):
+            data = np.load(data_path)
+            dates = data["DATES"].tolist()
+            values = data[data_type].tolist()
+        else:
+            dates, values = stripdata_2(data_path)
+
+        data_date_start = np.datetime64(dates[0])
+        data_date_end = np.datetime64(dates[-1])
+        
+        if start_date == None:
+            date_start = max(data_date_start, date_start)
+        else:
+            if data_date_start > start_date:
+                print(f"{data_type} data starting date ({data_date_start}) is greater than the given start date ({start_date}).")
+                return None
+            date_start = start_date
+
+        if end_date == None:
+            date_end = min(data_date_end, date_end)
+        else:
+            if data_date_end < end_date:
+                print(f"{data_type} data ending date ({data_date_end}) is less than the given end date ({end_date}).")
+                return None
+            date_end = end_date
+
+        DATAS[data_type] = [dates, values]
+    
+    #To clip the data according to found date limits
+    for data_type, values in DATAS.items():
+        dates, values = values
+        dates, values = clip_by_dates(data_type, dates, values, date_start, date_end)
+        DATAS[data_type] = [dates, values]
+
+    #Create the .npz file
+    len_check = None
+    numpified_data = {}
+    for data_type, values in DATAS.items():
+        dates, values = values
+
+        if len_check == None:
+            len_check = len(values)
+        elif len_check != len(values):
+            print(f"{len_check} != {len(values)}")
+            raise ValueError(f"{data_type} data length is NOT consistent.")
+        
+        numpified_data[data_type] = np.asarray(values)
+        numpified_data["DATES"] = np.asarray(dates, dtype=np.datetime64)
+    
+    if area != None:
+        numpified_data["AREA"] = area
+    
+    np.savez(file_name, **numpified_data)
+    return file_name
+
+def create_data(start_date = None, end_date = None, output_path:str = "DATA_NUMPY", area:float = None, **DATA_PATH_DICT):
+    """
+    DATA_PATH_DICT = {
+        "data_tag"  :   ["data_path_in_str", "old_data_tag if existing or None"]
+    """
+    if output_path is str:
+        output_path = Path(output_path).with_suffix(".npz")
+    else:
+        output_path = output_path.with_suffix(".npz")
+
+    if start_date:
+        start_date = np.datetime64(start_date)
+    if end_date:
+        end_date = np.datetime64(end_date)
+
+
+    date_start = ""
+    date_end = ""
+
+    DATAS = {}
+
+    for data_tag, values in DATA_PATH_DICT.items():
+        data_path, old_data_tag = values
+        if data_path.endswith((".npz")):
+            data = np.load(data_path)
+            dates = data["DATES"].tolist()
+            values = data[old_data_tag].tolist()
+        else:
+            dates, values = stripdata_2(data_path)
+
+        data_date_start = np.datetime64(dates[0], "D")
+        data_date_end = np.datetime64(dates[-1], "D")
+
+        if start_date == None:
+            date_start = max(data_date_start, date_start)
+        else:
+            if data_date_start > start_date:
+                raise ValueError(f"{data_tag} data starts after the specified start_date.")
+            else:
+                date_start = start_date
+
+        if end_date == None:
+            date_end = min(data_date_end, date_end)
+        else:
+            if data_date_end < end_date:
+                raise ValueError(f"{data_tag} data ends before the specified end_date.")
+            else:
+                date_end = end_date
+
+        DATAS[data_tag] = [dates, values]
+            
+    #To clip the data according to found date limits
+    for data_type, values in DATAS.items():
+        dates, values = values
+        dates ,values = clip_by_dates(data_type, dates, values, date_start, date_end)
+        DATAS[data_type] = [dates, values]
+    
+    #Create the .npz file
+    len_check = None
+    numpified_data = {}
+    for data_type, values in DATAS.items():
+        dates, values = values
+
+        if len_check == None:
+            len_check = len(values)
+        elif len_check != len(values):
+            print(f"{len_check} != {len(values)}")
+            raise ValueError(f"{data_type} data length is NOT consistent.")
+        
+        numpified_data[data_type] = np.asarray(values)
+        numpified_data["DATES"] = np.asarray(dates, dtype=np.datetime64)
+    
+    if area is not None:
+        numpified_data["AREA"] = area
+        
+    np.savez(output_path, **numpified_data)
+    return output_path
 
 def create_pet_data_PenmanMonteith(data_path:str, file_name:str = None):
     """"Needed Variables:
@@ -140,7 +306,7 @@ def create_pet_data_PenmanMonteith(data_path:str, file_name:str = None):
     ]
     OUTPUT UNIT = mm/day
     """
-    data = np.load(data_path.with_suffix(".npz"))
+    data = np.load(data_path)
 
     # --- Birim dönüşümleri ---
     T_mean = data["temperature_2m"] - 273.15          # K → °C
@@ -175,6 +341,9 @@ def create_pet_data_PenmanMonteith(data_path:str, file_name:str = None):
     denominator = delta + gamma * (1 + 0.34 * u2)
     PET = numerator / denominator   # mm/gün
 
+    mask = PET < 0
+    PET[mask] = 0
+
     np.savez(
         file=file_name.with_suffix(".npz"),
         PET=PET,
@@ -194,9 +363,6 @@ def change_P_unit(data_path:str, file_name:str):
         P=p,
     )
     print(f"P saved to {file_name.with_suffix('.npz')}")
-
-
-
 
 def special_case(start_year = float("-inf"), end_year = float("inf"), file_name:str = "SPECIAL_DATA.npz"):
     """
@@ -239,5 +405,11 @@ if __name__ == "__main__":
     """
     create_data(**{"Q" : "q_data", "PET" : "pet_data", "P" : "pre_data"}, create_json=True, start_year=1970, end_year=2000, file_name="1970-2000-calibration")
     """
-    
+    dates, values = stripdata_2("C:\Hydrology\GR4J\Dataset\pre_new_data.txt")
+    print(dates[0])
+    print(values[0])
+    n_dates = np.asarray(dates, dtype=np.datetime64)
+    print(n_dates[0])
+    plt.plot(n_dates, values)
+    plt.show()
     pass

@@ -27,20 +27,33 @@ class Optimizer():
         nse = G.calculate_nse(Q_obs, Q_sim, warmup_days=self.warmup_days)
 
         return 1 - nse
-
-    def objective_function_GR4J(self, params):
-        """
-        DEPRECATED! DO NOT USE THIS OBJECTIVE FUNCTION.
-        """
+    
+    def objective_function_GR4J_Numba_KGE(self, params):
         X1, X2, X3, X4 = params
 
-        Q_obs, Q_sim, S, R = G.GR4J(X1, X2, X3, X4, self.DATA, A=self.A)
+        Q_obs, Q_sim, S, R = G.GR4J_Numba(X1, X2, X3, X4, self.NUMBA_DATA[0], self.NUMBA_DATA[1], self.NUMBA_DATA[2], A=self.A)
+
+        kge = G.calculate_kge(Q_obs, Q_sim, warmup_days=self.warmup_days)
+
+        return 1 - kge
+    
+    def objective_function_GR4J_CN_Numba_NSE(self, params):
+        X1, X2, X3, X4, X5, X6 = params
+        Q_obs, Q_sim, S, R, g, eTG = G.GR4J_CemaNeige_Numba(X1, X2, X3, X4, X5, X6, self.NUMBA_DATA[0], self.NUMBA_DATA[1], self.NUMBA_DATA[2], self.NUMBA_DATA[3], A=self.A)
 
         nse = G.calculate_nse(Q_obs, Q_sim, warmup_days=self.warmup_days)
 
         return 1 - nse
 
-    def optimize(self, f = None):
+    def objective_function_GR4J_CN_Numba_KGE(self, params):
+        X1, X2, X3, X4, X5, X6 = params
+        Q_obs, Q_sim, S, R, g, eTG = G.GR4J_CemaNeige_Numba(X1, X2, X3, X4, X5, X6, self.NUMBA_DATA[0], self.NUMBA_DATA[1], self.NUMBA_DATA[2], self.NUMBA_DATA[3], A=self.A)
+
+        kge = G.calculate_kge(Q_obs, Q_sim, warmup_days=self.warmup_days)
+
+        return 1 - kge
+
+    def optimize(self, f = None, callback=None):
         if f == None:
             f = self.objective_function_GR4J_Numba
 
@@ -54,6 +67,7 @@ class Optimizer():
             popsize=self.popsize,
             tol=self.tol,
             atol=self.atol,
+            callback=callback,
             disp=True,
             workers=self.cpu_count
         )
